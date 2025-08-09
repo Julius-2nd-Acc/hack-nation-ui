@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import emitter from '../../lib/emitter';
 import { Drawer, IconButton, Button, Divider, Tabs, Tab, Box } from '@mui/material';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
@@ -11,9 +12,21 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
  *
  */
 
+
 const Sidebar: React.FC = () => {
     const [open, setOpen] = useState(true);
     const [tab, setTab] = useState(0);
+
+    useEffect(() => {
+        const handler = () => {
+            setOpen(true);
+            setTab(1); // Trace tab
+        };
+        emitter.on('ShowNode', handler);
+        return () => {
+            emitter.off('ShowNode', handler);
+        };
+    }, []);
 
     const handleTabChange = (_: React.SyntheticEvent, newValue: number) => {
         setTab(newValue);
