@@ -1,4 +1,13 @@
+// Helper to calculate duration in ms between two traces (using ts field)
+function calculateDurationMs(traceA?: Trace, traceB?: Trace): number | undefined {
+    if (typeof traceA?.ts === 'number' && typeof traceB?.ts === 'number') {
+        return Math.round((traceB.ts - traceA.ts) * 1000);
+    }
+    return undefined;
+}
 import React, { useEffect, useState } from "react";
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
 import emitter from "../../lib/emitter";
 import ReactFlow, { Background, Node, Edge, MarkerType } from "reactflow";
 import "reactflow/dist/style.css";
@@ -38,39 +47,73 @@ export default function FlowProvider() {
     const [nodes, setNodes] = useState<Node[]>(initialNodes);
     const [edges, setEdges] = useState<Edge[]>(initialEdges);
     const [step, setStep] = useState<number>(initialNodes.length);
+    const [chains, setChains] = useState<{ start: number, end: number }[]>([]);
+    const [selectedChainIdx, setSelectedChainIdx] = useState<number>(0);
     // Only fetch once on mount
     const { data, error } = trpc.python.traceToFlow.useQuery({}, { staleTime: Infinity, refetchOnMount: false, refetchOnWindowFocus: false });
 
+    // Parse chains from traces
     useEffect(() => {
-        if (error) return; // Do nothing on error
+        if (error) return;
         if (data && data.traces) {
-            const { nodes: parsedNodes, edges: parsedEdges } = parseTracesToFlow(data.traces);
+            // Find all chain_start and chain_end indices
+            const starts: number[] = [];
+            const ends: number[] = [];
+            data.traces.forEach((t, idx) => {
+                if (t.event === 'chain_start') starts.push(idx);
+                if (t.event === 'chain_end') ends.push(idx);
+            });
+            // Pair up starts and ends (assume order is correct)
+            const chainPairs: { start: number, end: number }[] = [];
+            for (let i = 0; i < Math.min(starts.length, ends.length); i++) {
+                if (starts[i] <= ends[i]) {
+                    chainPairs.push({ start: starts[i], end: ends[i] });
+                }
+            }
+            setChains(chainPairs);
+            // Default to most recent (last) chain
+            setSelectedChainIdx(chainPairs.length > 0 ? chainPairs.length - 1 : 0);
+        }
+    }, [data, error]);
+
+    // Parse nodes/edges for selected chain
+    useEffect(() => {
+        if (error) return;
+        if (data && data.traces && chains.length > 0) {
+            const { start, end } = chains[selectedChainIdx] || chains[0];
+            const tracesForChain = data.traces.slice(start, end + 1);
+            const { nodes: parsedNodes, edges: parsedEdges } = parseTracesToFlow(tracesForChain);
             setAllNodes(parsedNodes);
             setAllEdges(parsedEdges);
             setStep(parsedNodes.length);
             setNodes(parsedNodes.slice(0, 1));
             setEdges([]);
         }
-    }, [data, error]);
+    }, [data, error, chains, selectedChainIdx]);
 
     useEffect(() => {
         // Show up to current step
-        // Mark only the last node as processing
+        const visibleNodes = allNodes.slice(0, step);
+        const lastNode = visibleNodes[visibleNodes.length - 1];
+        const isEndStep = lastNode?.id === 'agent_end';
         setNodes(
-            allNodes.slice(0, step).map((node, idx, arr) => ({
+            visibleNodes.map((node, idx, arr) => ({
                 ...node,
                 data: {
                     ...node.data,
-                    processing: idx === arr.length - 1,
+                    processing: idx === arr.length - 1 && !isEndStep,
                 },
             }))
         );
         setEdges(
-            allEdges.slice(0, Math.max(0, step - 1)).map((edge, idx, arr) => ({
-                ...edge,
-                animated: idx === arr.length - 1,
-                style: idx === arr.length - 1 ? { stroke: 'red', strokeWidth: 3 } : {},
-            }))
+            allEdges.slice(0, Math.max(0, step - 1)).map((edge, idx, arr) => {
+                const isLast = idx === arr.length - 1;
+                return {
+                    ...edge,
+                    animated: isLast,
+                    style: isLast && !isEndStep ? { stroke: 'red', strokeWidth: 3 } : {},
+                };
+            })
         );
     }, [step, allNodes, allEdges]);
 
@@ -97,90 +140,119 @@ export default function FlowProvider() {
         nodes.push({
             id: `agent_start`,
             type: 'agent',
-            data: { label: 'Agent (Start)', trace: traces[0] },
+            data: {
+                label: 'Agent (Start)',
+                trace: {
+                    ...(traces[0] || {}),
+                    ...(traces[1] || {}),
+                    durationMs: calculateDurationMs(traces[0], traces[1]),
+                },
+            },
             position: { x, y },
         });
         prevNodeId = `agent_start`;
-        y += 300;
-        while (i < traces.length) {
-            const trace = traces[i];
+        y -= 150;
+        while (i < traces.length - 1) {
+            const traceA = traces[i];
+            const traceB = traces[i + 1];
             // 2. Tool node between tool_start and tool_end
-            if (trace.event === 'tool_start') {
+            if (traceA.event === 'tool_start' && traceB.event === 'tool_end') {
                 const toolNodeId = `tool_${nodeId++}`;
                 nodes.push({
                     id: toolNodeId,
                     type: 'tool',
-                    data: { label: trace.tool || 'Tool', trace },
-                    position: { x, y },
+                    data: {
+                        label: traceA.tool || 'Tool',
+                        trace: {
+                            ...traceA,
+                            ...traceB,
+                            durationMs: calculateDurationMs(traceA, traceB),
+                        },
+                    },
+                    position: { x: x + 300, y },
                 });
-                // Edge for tool_start event
                 edges.push({
                     id: `e-${prevNodeId}-${toolNodeId}`,
                     source: prevNodeId!,
                     target: toolNodeId,
-                    label: trace.input || '',
+                    label: '',
                     animated: true,
                     markerEnd: { type: MarkerType.ArrowClosed },
                 });
                 prevNodeId = toolNodeId;
-                y += 300;
-                // Find tool_end
-                while (i < traces.length && traces[i].event !== 'tool_end') i++;
+                y -= 150;
+                i += 2;
+                continue;
             }
             // 3. Agent node between llm_start and llm_end
-            else if (trace.event === 'llm_start') {
+            if (traceA.event === 'llm_start' && traceB.event === 'llm_end') {
                 const agentNodeId = `agent_${nodeId++}`;
                 nodes.push({
                     id: agentNodeId,
                     type: 'agent',
-                    data: { label: 'Agent', trace },
+                    data: {
+                        label: 'Agent',
+                        trace: {
+                            ...traceA,
+                            ...traceB,
+                            durationMs: calculateDurationMs(traceA, traceB),
+                        },
+                    },
                     position: { x, y },
                 });
-                // Edge for llm_start event
                 edges.push({
                     id: `e-${prevNodeId}-${agentNodeId}`,
                     source: prevNodeId!,
                     target: agentNodeId,
-                    label: trace.prompts && trace.prompts[0] ? trace.prompts[0] : '',
+                    label: '',
                     animated: true,
                     markerEnd: { type: MarkerType.ArrowClosed },
                 });
                 prevNodeId = agentNodeId;
-                y += 300;
-                // Find llm_end
-                while (i < traces.length && traces[i].event !== 'llm_end') i++;
+                y -= 150;
+                i += 2;
+                continue;
             }
             // 4. Edge for every event (label = input field)
-            else {
-                // Only create edge if not chain_start/chain_end
-                if (trace.event !== 'chain_start' && trace.event !== 'chain_end') {
-                    const edgeId = `e-${prevNodeId}-event${i}`;
-                    const nextNodeId = `event${i}`;
-                    nodes.push({
-                        id: nextNodeId,
-                        type: 'agent',
-                        data: { label: trace.event, trace },
-                        position: { x, y },
-                    });
-                    edges.push({
-                        id: edgeId,
-                        source: prevNodeId!,
-                        target: nextNodeId,
-                        label: trace.input || '',
-                        animated: true,
-                        markerEnd: { type: MarkerType.ArrowClosed },
-                    });
-                    prevNodeId = nextNodeId;
-                    y += 150;
-                }
-            }
-            i++;
+            const edgeId = `e-${prevNodeId}-event${i}`;
+            const nextNodeId = `event${i}`;
+            nodes.push({
+                id: nextNodeId,
+                type: 'agent',
+                data: {
+                    label: traceA.event,
+                    trace: {
+                        ...traceA,
+                        ...traceB,
+                        durationMs: calculateDurationMs(traceA, traceB),
+                    },
+                },
+                position: { x, y },
+            });
+            edges.push({
+                id: edgeId,
+                source: prevNodeId!,
+                target: nextNodeId,
+                label: "",
+                animated: true,
+                markerEnd: { type: MarkerType.ArrowClosed },
+            });
+            prevNodeId = nextNodeId;
+            y -= 150;
+            i += 1;
         }
         // 5. Agent node after chain_end
         nodes.push({
             id: `agent_end`,
             type: 'agent',
-            data: { label: 'Agent (End)', trace: traces[traces.length - 1] },
+            data: {
+                label: 'Agent (End)',
+                trace: {
+                    ...(traces[traces.length - 2] || {}),
+                    ...(traces[traces.length - 1] || {}),
+                    durationMs: calculateDurationMs(traces[traces.length - 2], traces[traces.length - 1]),
+                },
+            },
             position: { x, y },
         });
         edges.push({
@@ -195,8 +267,8 @@ export default function FlowProvider() {
     }
 
     // Handler for node click
-    const handleNodeClick = () => {
-        emitter.emit('ShowNode');
+    const handleNodeClick = (_event: any, node: Node) => {
+        emitter.emit('ShowNode', node.data?.trace);
     };
     return (
         <div style={{ width: "100vw", height: "100vh", position: "relative", overflow: "hidden" }}>
@@ -210,7 +282,7 @@ export default function FlowProvider() {
             >
                 <Background />
             </ReactFlow>
-            {/* Button group at the top left using Material UI IconButton */}
+            {/* Button group and chain dropdown at the top left using Material UI */}
             <div
                 style={{
                     position: "absolute",
@@ -219,6 +291,7 @@ export default function FlowProvider() {
                     display: "flex",
                     gap: 8,
                     zIndex: 100,
+                    alignItems: 'center',
                 }}
             >
                 <IconButton color="warning" sx={{ background: 'white', color: 'black', }} onClick={handleStepBackward}>
@@ -230,10 +303,24 @@ export default function FlowProvider() {
                 <IconButton color="error" sx={{ background: 'white', color: 'black', }}>
                     <StopIcon />
                 </IconButton>
-
                 <IconButton color="success" sx={{ background: 'white', color: 'black', }} onClick={handleStepForward}>
                     <SkipNextIcon />
                 </IconButton>
+                {/* Dropdown for chain selection */}
+                {chains.length > 1 && (
+                    <Select
+                        value={selectedChainIdx}
+                        onChange={e => setSelectedChainIdx(Number(e.target.value))}
+                        size="small"
+                        sx={{ minWidth: 120, background: 'white', ml: 2 }}
+                    >
+                        {chains.map((chain, idx) => (
+                            <MenuItem key={idx} value={idx}>
+                                {`Chain ${idx + 1} (${chain.start} - ${chain.end})`}
+                            </MenuItem>
+                        ))}
+                    </Select>
+                )}
             </div>
         </div>
     );

@@ -22,8 +22,8 @@ function AgentNode(props: NodeProps<AgentNodeData>) {
     return (
         <div style={{ ...nodeStyle, backgroundColor: 'lightskyblue', border: processing ? '2px solid red' : '2px solid steelblue', color: 'black', boxShadow: '0px 6px 0px 1px steelblue', position: 'relative', textAlign: 'center' }}>
             <Handle
-                type="target"
-                id="target"
+                type="source"
+                id="source"
                 position={Position.Top}
                 style={{
                     width: 15,
@@ -32,7 +32,6 @@ function AgentNode(props: NodeProps<AgentNodeData>) {
                     borderColor: 'transparent', // hide
                     position: 'absolute',
                     left: '50%',
-                    bottom: -18, // move further out
                     transform: 'translateX(-50%)',
                 }}
             />
@@ -78,8 +77,8 @@ function AgentNode(props: NodeProps<AgentNodeData>) {
             >
             </h4>
             <Handle
-                type="source"
-                id="source"
+                type="target"
+                id="target"
                 position={Position.Bottom}
                 style={{
                     width: 15,
@@ -88,7 +87,7 @@ function AgentNode(props: NodeProps<AgentNodeData>) {
                     borderColor: 'transparent', // hide
                     position: 'absolute',
                     left: '50%',
-                    top: -18, // move further out
+
                     transform: 'translateX(-50%)',
                 }}
             />

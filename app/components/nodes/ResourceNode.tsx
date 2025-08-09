@@ -23,8 +23,8 @@ function ResourceNode(props: NodeProps<ResourceNodeData>) {
     return (
         <div style={{ ...nodeStyle, backgroundColor: 'lightgreen', border: processing ? '2px solid red' : '2px solid seagreen', color: 'black', boxShadow: '0px 6px 0px 1px seagreen', position: 'relative', textAlign: 'center' }}>
             <Handle
-                type="target"
-                id="target"
+                type="source"
+                id="source"
                 position={Position.Top}
                 style={{
                     width: 15,
@@ -78,8 +78,8 @@ function ResourceNode(props: NodeProps<ResourceNodeData>) {
             >
             </h4>
             <Handle
-                type="source"
-                id="source"
+                type="target"
+                id="target"
                 position={Position.Bottom}
                 style={{
                     width: 15,

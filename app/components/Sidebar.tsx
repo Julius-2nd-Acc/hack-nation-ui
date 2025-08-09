@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import emitter from '../../lib/emitter';
-import { Drawer, IconButton, Button, Divider, Tabs, Tab, Box } from '@mui/material';
+import { Drawer, IconButton, Button, Divider, Tabs, Tab, Box, Collapse, Grid } from '@mui/material';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 
 
 /**
@@ -16,11 +18,15 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 const Sidebar: React.FC = () => {
     const [open, setOpen] = useState(true);
     const [tab, setTab] = useState(0);
+    const [traceInfo, setTraceInfo] = useState<any>(null);
+    const [paramsOpen, setParamsOpen] = useState(false);
 
     useEffect(() => {
-        const handler = () => {
+        const handler = (traceInfo: any) => {
             setOpen(true);
             setTab(1); // Trace tab
+            setTraceInfo(traceInfo);
+            console.log('Sidebar received trace info:', traceInfo);
         };
         emitter.on('ShowNode', handler);
         return () => {
@@ -31,6 +37,68 @@ const Sidebar: React.FC = () => {
     const handleTabChange = (_: React.SyntheticEvent, newValue: number) => {
         setTab(newValue);
     };
+
+    // Helper to render a field if present
+    const renderField = (label: string, value: any) => (
+        value !== undefined && value !== null && value !== '' ? (
+            <Box sx={{ mb: 1 }}>
+                <label style={{ fontWeight: 500, color: '#2563eb', fontSize: 13 }}>{label}</label>
+                <Box sx={{ width: '100%', p: 1, borderRadius: 1, bgcolor: '#f7fafd', border: '1px solid #e0e7ff', mt: 0.5, fontSize: 15, whiteSpace: 'pre-wrap' }}>{String(value)}</Box>
+            </Box>
+        ) : null
+    );
+
+    // Helper to render a scrollable field (for prompts, input, output)
+    const renderScrollableField = (label: string, value: any) => (
+        value !== undefined && value !== null && value !== '' ? (
+            <Box sx={{ mb: 1 }}>
+                <label style={{ fontWeight: 500, color: '#2563eb', fontSize: 13 }}>{label}</label>
+                <Box
+                    sx={{
+                        width: '100%',
+                        p: 1,
+                        borderRadius: 1,
+                        bgcolor: '#f7fafd',
+                        border: '1px solid #e0e7ff',
+                        mt: 0.5,
+                        fontSize: 15,
+                        whiteSpace: 'pre-wrap',
+                        maxHeight: 120,
+                        overflowY: 'auto',
+                        fontFamily: 'monospace',
+                    }}
+                >
+                    {String(value)}
+                </Box>
+            </Box>
+        ) : null
+    );
+
+    // Helper to render params as a collapsible grid
+    const renderParams = (params: any) => (
+        params ? (
+            <Box sx={{ mb: 1 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }} onClick={() => setParamsOpen(!paramsOpen)}>
+                    <label style={{ fontWeight: 500, color: '#2563eb', fontSize: 13 }}>Parameters</label>
+                    {paramsOpen ? <ExpandLessIcon sx={{ ml: 1 }} /> : <ExpandMoreIcon sx={{ ml: 1 }} />}
+                </Box>
+                <Collapse in={paramsOpen}>
+                    <Box sx={{ mt: 1 }}>
+                        <table style={{ width: '100%', fontSize: 14 }}>
+                            <tbody>
+                                {Object.entries(params).map(([key, value]) => (
+                                    <tr key={key}>
+                                        <td style={{ fontWeight: 500, color: '#555', padding: '2px 8px 2px 0', width: '40%' }}>{key}</td>
+                                        <td style={{ color: '#222', padding: '2px 0' }}>{String(value)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </Box>
+                </Collapse>
+            </Box>
+        ) : null
+    );
 
     return (
         <div className="flex">
@@ -116,54 +184,32 @@ const Sidebar: React.FC = () => {
                             </Box>
                         )}
                         {tab === 1 && (
-                            <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', flex: 1, minHeight: 0, gap: 2 }}>
-                                <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
-                                    <Box>
-                                        <label style={{ fontWeight: 500, color: '#2563eb', fontSize: 13 }}>id</label>
-                                        <input
-                                            type="text"
-                                            value="123456"
-                                            readOnly
-                                            style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid #e0e7ff', background: '#f7fafd', marginTop: 4 }}
-                                        />
-                                    </Box>
-                                    <Box>
-                                        <label style={{ fontWeight: 500, color: '#2563eb', fontSize: 13 }}>prompt</label>
-                                        <input
-                                            type="text"
-                                            value="What is the weather today?"
-                                            readOnly
-                                            style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid #e0e7ff', background: '#f7fafd', marginTop: 4 }}
-                                        />
-                                    </Box>
-                                    <Box>
-                                        <label style={{ fontWeight: 500, color: '#2563eb', fontSize: 13 }}>token_consumption</label>
-                                        <input
-                                            type="text"
-                                            value="42"
-                                            readOnly
-                                            style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid #e0e7ff', background: '#f7fafd', marginTop: 4 }}
-                                        />
-                                    </Box>
-                                    <Box>
-                                        <label style={{ fontWeight: 500, color: '#2563eb', fontSize: 13 }}>temperature</label>
-                                        <input
-                                            type="text"
-                                            value="0.7"
-                                            readOnly
-                                            style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid #e0e7ff', background: '#f7fafd', marginTop: 4 }}
-                                        />
-                                    </Box>
-                                </Box>
-                                <Box sx={{ p: 1, bgcolor: '#fff', borderRadius: 2, mt: 'auto' }}>
-                                    <Button
-                                        variant="contained"
-                                        color="primary"
-                                        sx={{ width: '100%', fontWeight: 600 }}
-                                    >
-                                        Execute
-                                    </Button>
-                                </Box>
+                            <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', flex: 1, minHeight: 0, gap: 2, pt: 2 }}>
+                                {traceInfo && (
+                                    <>
+                                        {/* Input Data */}
+                                        <Box sx={{ mb: 2 }}>
+                                            <label style={{ fontWeight: 600, color: '#222', fontSize: 15 }}>Parameters</label>
+                                            {renderParams(traceInfo.params)}
+                                            <label style={{ fontWeight: 600, color: '#222', fontSize: 15 }}>Input Data</label>
+
+                                            {renderScrollableField('Input', traceInfo.input || (traceInfo.inputs && traceInfo.inputs.input))}
+                                            {renderField('Tool', traceInfo.tool)}
+                                            {renderScrollableField('Prompts', traceInfo.prompts && traceInfo.prompts.join('\n'))}
+
+                                            {renderField('Duration (ms)', traceInfo.durationMs)}
+                                        </Box>
+                                        <Divider />
+
+                                        {(traceInfo.output || (traceInfo.outputs && traceInfo.outputs.output)) && (
+                                            <Box sx={{ mt: 2 }}>
+                                                <label style={{ fontWeight: 600, color: '#222', fontSize: 15 }}>Output Data</label>
+                                                {renderScrollableField('Output', traceInfo.output)}
+                                                {renderScrollableField('Final Answer:', traceInfo.outputs && traceInfo.outputs.output)}
+                                            </Box>
+                                        )}
+                                    </>
+                                )}
                             </Box>
                         )}
                         <Divider sx={{ margin: '8px 0' }} />

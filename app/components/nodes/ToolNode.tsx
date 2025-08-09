@@ -23,9 +23,9 @@ function ToolNode(props: NodeProps<ToolNodeData>) {
     return (
         <div style={{ ...nodeStyle, backgroundColor: 'lightsalmon', border: processing ? '2px solid red' : '2px solid rgb(189, 124, 103)', color: 'black', boxShadow: '0px 6px 0px 1px rgb(189, 124, 103)', position: 'relative', textAlign: 'center' }}>
             <Handle
-                type="target"
-                id="target"
-                position={Position.Bottom}
+                type="source"
+                id="source"
+                position={Position.Top}
                 style={{
                     width: 15,
                     height: 15,
@@ -33,7 +33,7 @@ function ToolNode(props: NodeProps<ToolNodeData>) {
                     borderColor: 'transparent', // hide
                     position: 'absolute',
                     left: '50%',
-                    bottom: -18, // move further out
+
                     transform: 'translateX(-50%)',
                 }}
             />
@@ -80,9 +80,9 @@ function ToolNode(props: NodeProps<ToolNodeData>) {
             >test
             </h4>
             <Handle
-                type="source"
-                id="source"
-                position={Position.Top}
+                type="target"
+                id="target"
+                position={Position.Bottom}
                 style={{
                     width: 15,
                     height: 15,
@@ -90,7 +90,7 @@ function ToolNode(props: NodeProps<ToolNodeData>) {
                     borderColor: 'transparent', // hide
                     position: 'absolute',
                     left: '50%',
-                    top: -18, // move further out
+
                     transform: 'translateX(-50%)',
                 }}
             />
