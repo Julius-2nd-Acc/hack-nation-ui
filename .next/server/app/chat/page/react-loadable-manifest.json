@@ -1,1 +1,11 @@
-{}
+{
+  "[project]/app/components/FlowProvider.tsx [app-client] (ecmascript, next/dynamic entry)": {
+    "id": "[project]/app/components/FlowProvider.tsx [app-client] (ecmascript, next/dynamic entry)",
+    "files": [
+      "static/chunks/node_modules_4db6c150._.js",
+      "static/chunks/app_components_96d2306a._.js",
+      "static/chunks/node_modules_reactflow_dist_style_1392350c.css",
+      "static/chunks/app_components_FlowProvider_tsx_ee5a659a._.js"
+    ]
+  }
+}
