@@ -1,36 +1,61 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Hack Nation UI
 
-## Getting Started
+This project is a Next.js-based frontend for visualizing and interacting with AI agent trace data as a flow diagram. It is designed for debugging, analysis, and exploration of agent/tool/resource chains and their performance.
 
-First, run the development server:
+### WHAT IS CURRENTLY MOST IMPORTANT
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- The tRPC router is located in `app/server/routers/python.ts`. Only modify API-related calls here and in the frontend.
+- Most important visuals are in the `app/components` directory.
+- The flow route is located at `app/trace` (accessible via "localhost:3000/trace").
+- For React Flow tutorials and documentation, refer to [React Flow](https://reactflow.dev/).
+- Mitt is used for emitting events, including those that trigger displaying trace details in the sidebar.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### WHAT NEEDS TO BE DONE
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- Add chatting functionality.
+- Change polling behavior: currently, polling is done only once; it should continue as long as a chain has stopped.
+- Update the Homepage (a basic system is already in place).
+- Develop the Graphs tab (to display token consumption, similar to Langsmith).
+- Implement autofocus on the center of the flow.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Key Fundamentals
 
-## Learn More
+### 1. **Tech Stack**
 
-To learn more about Next.js, take a look at the following resources:
+- **Next.js (App Router)**: Modern React framework for SSR/SSG and routing.
+- **React Flow**: Visualizes traces as interactive node/edge diagrams.
+- **Material UI**: UI components (sidebar, buttons, dropdowns, etc).
+- **tRPC**: Type-safe API layer for fetching trace/session data.
+- **mitt**: Event emitter for node-to-sidebar communication.
+- **TypeScript**: Type safety throughout the codebase.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 2. **Core Concepts**
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- **Trace Data**: Each trace represents an event (e.g., `chain_start`, `tool_start`, `llm_end`) with timing, input/output, and parameters.
+- **Nodes**: Each node in the flow represents a merged pair of trace events (e.g., tool start/end), and stores all relevant trace data.
+- **Edges**: Edges represent the flow of data or control between nodes.
+- **Chains**: Multiple independent chains (flows) can be visualized; users can select which chain to view.
+- **Sidebar**: Clicking a node opens a sidebar with all trace details, including scrollable fields for large content.
 
-## Deploy on Vercel
+### 3. **Visual Aids**
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- **Node Coloring**: Nodes are colored by response time (duration), transitioning from blue/salmon (fast) to yellow (medium) to red (slow).
+- **Step Navigation**: Users can step through the flow to highlight the current node/edge.
+- **Dropdown**: If multiple chains are present, a dropdown allows switching between them.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### 4. **Extensibility**
+
+- **Custom Nodes**: Agent, Tool, and Resource nodes can be extended for more detail or interactivity.
+- **Trace Parsing**: The system can be adapted to new trace formats or event types.
+- **UI Customization**: Material UI and React Flow allow for easy UI/UX changes.
+
+### 5. **Development**
+
+- `npm install` to install dependencies.
+- `npm run dev` to start the development server.
+- Main code is in `app/components/` (nodes, sidebar, flow logic).
+- Utility functions are in `app/util/`.
+
+---
+
+For more details, see the code comments and explore the components in `app/components/`.
