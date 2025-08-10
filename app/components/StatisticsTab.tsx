@@ -95,7 +95,27 @@ const StatisticsTab: React.FC = () => {
                     )}
                 </>
             ) : (
-                <Typography variant="body2">No statistics available yet.</Typography>
+                <Box>
+                    <Typography variant="body2">No statistics available yet. Showing sample data:</Typography>
+                    <Box sx={{ mt: 2, height: 300 }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={[
+                                { name: 'Max Response Time', value: 3200 },
+                                { name: 'Min Response Time', value: 900 },
+                                { name: 'Avg Response Time', value: 1800 },
+                                { name: 'Total Requests', value: 12 },
+                                // Error Rate as a number for bar chart, or skip if not numeric
+                            ]} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis dataKey="name" />
+                                <YAxis />
+                                <Tooltip />
+                                <Legend />
+                                <Bar dataKey="value" fill="#2563eb" />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </Box>
+                </Box>
             )}
         </Box>
     );

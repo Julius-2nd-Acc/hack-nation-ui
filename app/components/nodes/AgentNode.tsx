@@ -44,8 +44,8 @@ function AgentNode(props: NodeProps<AgentNodeData>) {
     const processing = props.data.processing ?? false;
     // Visual aid: color by durationMs (0ms=lightskyblue, 5s=yellow, 10s=red)
     let bg = 'lightskyblue';
-    let borderColor = 'rgba(70,130,180)'; // steelblue with alpha
-    let shadowColor = 'rgba(70,130,180)';
+    let borderColor = 'rgba(70,130,180,0.3)'; // steelblue with alpha
+    let shadowColor = 'rgba(70,130,180,0.5)';
     const duration = (props.data as any)?.trace?.durationMs;
     if (typeof duration === 'number') {
         const seconds = duration / 1000;

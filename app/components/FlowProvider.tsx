@@ -1,3 +1,5 @@
+// --- ReplayAgentNode handler ---
+
 // Helper to calculate duration in ms between two traces (using ts field)
 function calculateDurationMs(traceA?: Trace, traceB?: Trace): number | undefined {
     if (typeof traceA?.ts === 'number' && typeof traceB?.ts === 'number') {
@@ -57,6 +59,8 @@ export default function FlowProvider() {
     const [externalTraces, setExternalTraces] = useState<Trace[] | null>(null);
     const [externalNodes, setExternalNodes] = useState<Node[]>([]);
     const [externalEdges, setExternalEdges] = useState<Edge[]>([]);
+
+
     // Only fetch if sessionId is present
     const {
         data,
@@ -90,6 +94,61 @@ export default function FlowProvider() {
             emitter.off('Refetch', refetchHandler);
         };
     }, [refetchTraceToFlow]);
+
+
+    const chatReplayMutation = trpc.python.chatReplay.useMutation();
+    useEffect(() => {
+        const handler = async (traceInfo: any) => {
+            // Find all traces up to and including the selected node
+            let traces: Trace[] = [];
+            if (selectedChainIdx === -1 && externalTraces) {
+                traces = externalTraces;
+            } else if (data && data.traces) {
+                // Use traces for the selected chain if available
+                function isTrace(m: any): m is Trace {
+                    return m && typeof m.event === 'string' && typeof m.ts === 'number';
+                }
+                const allTraces = (data.traces as any[]).filter(isTrace);
+                if (chains.length > 0 && selectedChainIdx >= 0) {
+                    const { start, end } = chains[selectedChainIdx];
+                    traces = allTraces.slice(start, end + 1);
+                } else {
+                    traces = allTraces;
+                }
+            }
+            // Find the index of the selected trace in traces
+            let idx = traces.findIndex(t => t.ts === traceInfo.ts && t.event === traceInfo.event);
+            if (idx === -1) idx = traces.length - 1;
+            const replayTraces = traces.slice(0, idx + 1);
+            console.log("traceInfo", traceInfo);
+            // Use newPrompt if present and non-empty, else use default prompt
+            const prompt = (typeof traceInfo.newPrompt === 'string' && traceInfo.newPrompt.trim() !== '')
+                ? traceInfo.newPrompt
+                : (traceInfo.input || (traceInfo.inputs && traceInfo.inputs.input) || '');
+            console.log("prompt", prompt)
+            console.log('Replay traces:', replayTraces);
+            emitter.emit('UpdateFlowFromTraces', replayTraces);
+            try {
+                if (replayTraces.length > 0 && replayTraces[replayTraces.length - 1].event === 'llm_end') {
+                    replayTraces.pop();
+                }
+                const res = await chatReplayMutation.mutateAsync({
+                    history: [], // Optionally pass chat history if available
+                    traces: replayTraces,
+                    user_prompt: prompt,
+                });
+                // Optionally, you can emit new traces or update the flow
+                if (res && res.traces) {
+                    emitter.emit('UpdateFlowFromTraces', res.traces);
+                }
+            } catch (e) {
+                // Optionally handle error (emit event, show toast, etc)
+                console.error('ReplayAgentNode error:', e);
+            }
+        };
+        emitter.on('ReplayAgentNode', handler);
+        return () => emitter.off('ReplayAgentNode', handler);
+    }, [data, chains, selectedChainIdx, externalTraces, chatReplayMutation]);
 
     // Parse chains from traces and emit statistics
     useEffect(() => {

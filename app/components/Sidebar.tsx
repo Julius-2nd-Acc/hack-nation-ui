@@ -3,12 +3,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { trpc } from '../_trpc/client';
 import emitter from '../../lib/emitter';
-import { Drawer, IconButton, Button, Divider, Tabs, Tab, Box, Collapse, Grid } from '@mui/material';
+import { Drawer, IconButton, Button, Divider, Tabs, Tab, Box, Collapse, Grid, CircularProgress, InputLabel } from '@mui/material';
 import StatisticsTab from './StatisticsTab';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import { TextField } from '@mui/material';
+
 
 
 /**
@@ -20,11 +22,13 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 
 
 const Sidebar: React.FC = () => {
+    // Replay button now emits a mitt event; mutation is handled in FlowProvider
     const [open, setOpen] = useState(true);
     const [tab, setTab] = useState(0);
     const [traceInfo, setTraceInfo] = useState<any>(null);
     const [chatInput, setChatInput] = useState("");
     const [chatMessages, setChatMessages] = useState<any[]>([]);
+    const [newPrompt, setNewPrompt] = useState("");
     // Read session_id from URL params on mount
     const [chatSessionId, setChatSessionId] = useState<string | undefined>(() => {
         if (typeof window !== 'undefined') {
@@ -75,6 +79,7 @@ const Sidebar: React.FC = () => {
         const handler = (traceInfo: any) => {
             setOpen(true);
             setTab(1); // Trace tab
+            console.log('Sidebar received trace info:', traceInfo);
             setTraceInfo(traceInfo);
             console.log('Sidebar received trace info:', traceInfo);
         };
@@ -98,9 +103,31 @@ const Sidebar: React.FC = () => {
         ) : null
     );
 
-    // Helper to render a scrollable field (for prompts, input, output)
-    const renderScrollableField = (label: string, value: any) => (
-        value !== undefined && value !== null && value !== '' ? (
+    // Editable component to allow modifying "Prompt" fields
+    const EditableScrollableField: React.FC<{ label: string; value: any }> = ({ label, value }) => {
+        const [text, setText] = useState(String(value));
+        return (
+            <Box sx={{ mb: 1 }}>
+                <TextField
+                    label={label}
+                    value={text}
+                    onChange={(e) => setText(e.target.value)}
+                    multiline
+                    variant="outlined"
+                    fullWidth
+                    InputProps={{ style: { fontFamily: 'monospace', fontSize: 15 } }}
+                    sx={{ mt: 0.5 }}
+                />
+            </Box>
+        );
+    };
+
+    const renderScrollableField = (label: string, value: any) => {
+        if (value === undefined || value === null || value === '') return null;
+        if (label.toLowerCase() === 'prompt') {
+            return <EditableScrollableField label={label} value={value} />;
+        }
+        return (
             <Box sx={{ mb: 1 }}>
                 <label style={{ fontWeight: 500, color: '#2563eb', fontSize: 13 }}>{label}</label>
                 <Box
@@ -121,8 +148,8 @@ const Sidebar: React.FC = () => {
                     {String(value)}
                 </Box>
             </Box>
-        ) : null
-    );
+        );
+    };
 
     // Helper to render params as a collapsible grid
     const renderParams = (params: any) => (
@@ -318,6 +345,8 @@ const Sidebar: React.FC = () => {
                             <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', flex: 1, minHeight: 0, gap: 2, pt: 2 }}>
                                 {traceInfo && (
                                     <>
+                                        {/* Replay button for agent node */}
+
                                         {/* Input Data */}
                                         <Box sx={{ mb: 2 }}>
                                             {traceInfo.params && (
@@ -348,6 +377,35 @@ const Sidebar: React.FC = () => {
                                             </Box>
                                         )}
                                     </>
+                                )}
+                                {(traceInfo.event === 'llm_end' || traceInfo.event === 'chain_start') && (
+                                    <TextField
+                                        variant="outlined"
+                                        fullWidth
+                                        value={newPrompt}
+                                        onChange={(e) => {
+                                            setNewPrompt(e.target.value);
+
+                                        }}
+                                    />)}
+                                {(traceInfo.event === 'llm_end' || traceInfo.event === 'chain_start') && (
+
+
+                                    <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
+                                        <Button
+                                            variant="contained"
+                                            color="secondary"
+                                            onClick={() => {
+                                                if (newPrompt !== "") {
+                                                    emitter.emit('ReplayAgentNode', { ...traceInfo, newPrompt: newPrompt });
+                                                } else {
+                                                    emitter.emit('ReplayAgentNode', traceInfo);
+                                                }
+                                            }}
+                                        >
+                                            Replay
+                                        </Button>
+                                    </Box>
                                 )}
                             </Box>
                         )}

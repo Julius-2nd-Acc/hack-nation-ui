@@ -107,6 +107,32 @@ export const pythonRouter = router({
             // Validate and return as session/messages response
             return SessionToFlowResponseSchema.parse(data);
         }),
+
+    chatReplay: publicProcedure
+        .input(
+            z.object({
+                history: z.array(z.unknown()),
+                traces: z.array(z.unknown()),
+                user_prompt: z.string().optional().nullable(),
+            })
+        )
+        .mutation(async ({ input }) => {
+            if (!TRACE_API_URL) {
+                throw new Error('TRACE_API_URL is not set in environment variables');
+            }
+            const url = `${TRACE_API_URL}/chat/replay`;
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(input),
+            });
+            if (!res.ok) {
+                const err = await res.text();
+                throw new Error(`Failed to replay chat: ${res.status} ${res.statusText} - ${err}`);
+            }
+            const data = await res.json();
+            return data;
+        }),
     
     chatHistory: publicProcedure
         .input(z.object({ session_id: z.string() }))
