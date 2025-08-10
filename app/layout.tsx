@@ -39,7 +39,7 @@ export default function RootLayout({
             <header className="flex h-16 items-center justify-between gap-4 p-4">
               {/* Logo and title */}
               <div className="flex items-center gap-1.5">
-                <img src="/toolbench-logo.svg" alt="ToolBench Logo" style={{ width: 56, height: 56, display: 'block' }} />
+                <img src="/toolbench.png" alt="ToolBench Logo" style={{ width: 56, height: 56, display: 'block' }} />
                 <span
                   style={{
                     fontSize: 28,

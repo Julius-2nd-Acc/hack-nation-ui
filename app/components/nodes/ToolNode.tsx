@@ -24,6 +24,7 @@ import { useState } from "react";
 
 import { Handle, NodeProps, Position } from "reactflow";
 import SettingsIcon from '@mui/icons-material/Settings';
+import BuildIcon from '@mui/icons-material/Build';
 
 export type ToolNodeData = {
     processing?: boolean; // Optional processing state
@@ -94,32 +95,17 @@ function ToolNode(props: NodeProps<ToolNodeData>) {
                 >
                     {props.data.label ?? 'Resource'}
                 </h3>
-                <div style={{ position: 'absolute', right: 0, top: 0 }}>
-                    <SettingsIcon
-                        style={{
-                            fontSize: 30,
-                            animation: processing ? 'spin 1s linear infinite' : 'none',
-                            color: processing ? 'red' : 'rgba(0, 0, 0, 0.3)',
-                        }}
-                    />
-                    <style>{`
-                        @keyframes spin {
-                            from { transform: rotate(0deg); }
-                            to { transform: rotate(360deg); }
-                        }
-                    `}</style>
-                </div>
+
             </div>
-            <h4
+            <BuildIcon
                 style={{
                     color: 'rgba(0,0,0,0.3)',
                     margin: '5px 0 0 0',
                     position: 'relative',
                     textAlign: 'center',
-                    fontWeight: 'bold',
+                    fontSize: '2rem',
                 }}
-            >test
-            </h4>
+            />
             <Handle
                 type="target"
                 id="target"

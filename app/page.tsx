@@ -1,103 +1,89 @@
-'use client'
+"use client";
 
-
-import { SignInButton, useAuth } from '@clerk/nextjs'
-import { redirect } from 'next/navigation'
-import { trpc } from '@/app/_trpc/client'
-import { useState } from 'react'
-import dynamic from 'next/dynamic'
-const Posts = dynamic(() => import('./posts'), { ssr: false })
+import { SignInButton, SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
+import Link from "next/link";
 
 export default function Home() {
-  const [title, setTitle] = useState('')
-  const [content, setContent] = useState('')
-  // Use Clerk's `useAuth()` hook to get the user's ID
-  const { userId, isLoaded } = useAuth()
-  // Use the `createPosts` mutation from the TRPC client
-  const createPostMutation = trpc.post.createPosts.useMutation()
-
-  // Check if Clerk is loaded
-  if (!isLoaded) {
-    return (
-      <div className="flex h-[calc(100vh-4rem)] flex-col items-center justify-center space-y-4">
-        <div>Loading...</div>
-      </div>
-    )
-  }
-
-  // Protect this page from unauthenticated users
-  if (!userId) {
-    return (
-      <div className="flex h-[calc(100vh-4rem)] flex-col items-center justify-center space-y-4">
-        <p>You must be signed in to create a post.</p>
-        <SignInButton>
-          <button
-            type="submit"
-            className="inline-block cursor-pointer rounded-lg border-2 border-current px-4 py-2 text-current transition-all hover:scale-[0.98]"
-          >
-            Sign in
-          </button>
-        </SignInButton>
-      </div>
-    )
-  }
-
-
-  // Handle form submission
-  async function createPost(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-
-    createPostMutation.mutate({
-      title,
-      content,
-      authorId: userId as string,
-    })
-
-    redirect('/')
-  }
-
   return (
-    <div className="mx-auto max-w-2xl p-4">
-      <h1 className="mb-6 text-2xl font-bold">Create New Post</h1>
-      <form onSubmit={createPost} className="space-y-6">
-        <div>
-          <label htmlFor="title" className="mb-2 block text-lg">
-            Title
-          </label>
-          <input
-            type="text"
-            id="title"
-            name="title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Enter your post title"
-            className="w-full rounded-lg border px-4 py-2"
-          />
-        </div>
-        <div>
-          <label htmlFor="content" className="mb-2 block text-lg">
-            Content
-          </label>
-          <textarea
-            id="content"
-            name="content"
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            placeholder="Write your post content here..."
-            rows={6}
-            className="w-full rounded-lg border px-4 py-2"
-          />
-        </div>
-        <button
-          type="submit"
-          className="inline-block w-full rounded-lg border-2 border-current px-4 py-2 text-current transition-all hover:scale-[0.98]"
-        >
-          Create Post
-        </button>
-      </form>
-      <div className="mt-12">
-        <Posts />
+    <main className="relative min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-blue-50 via-white to-blue-100 dark:from-gray-900 dark:via-gray-950 dark:to-blue-950 overflow-hidden">
+      {/* Animated background blobs */}
+      <div className="absolute inset-0 -z-10 overflow-hidden">
+        <div className="absolute left-[-10vw] top-[-10vw] w-[40vw] h-[40vw] bg-blue-200 dark:bg-blue-900 rounded-full blur-3xl opacity-60 animate-blob1" />
+        <div className="absolute right-[-10vw] bottom-[-10vw] w-[50vw] h-[50vw] bg-blue-400 dark:bg-blue-800 rounded-full blur-3xl opacity-50 animate-blob2" />
+        <div className="absolute left-[30vw] top-[60vh] w-[30vw] h-[30vw] bg-blue-300 dark:bg-blue-700 rounded-full blur-2xl opacity-40 animate-blob3" />
       </div>
-    </div>
-  )
+
+      {/* Logo and title */}
+      <div className="flex flex-col items-center gap-6 mt-[-4rem]">
+        <div className="w-32 h-32 flex items-center justify-center animate-float rounded-full overflow-hidden">
+          <img src="/toolbench.png" alt="Toolbench Logo" className="w-full h-full object-cover drop-shadow-xl" />
+        </div>
+        <h1>
+          <span
+            style={{
+              fontSize: 50,
+              fontWeight: 700,
+              color: 'white',
+              textShadow: '0 2px 8px rgba(0,0,0,0.04)',
+              letterSpacing: 1,
+              lineHeight: 1,
+              display: 'inline-block',
+              position: 'relative',
+            }}
+          >
+            Tool
+            <span style={{ color: 'steelblue' }}>Bench</span>
+          </span>
+        </h1>
+        <p className="text-lg text-gray-600 dark:text-gray-300 max-w-xl text-center mt-2">
+          Visualize, debug, and chat with your AI chains. <br />
+          <span className="text-blue-500 dark:text-blue-200 font-semibold">Trace. Chat. Analyze.</span>
+        </p>
+      </div>
+
+      {/* Login and navigation */}
+      <div className="flex flex-col items-center gap-4 mt-10">
+        <SignedIn>
+          <UserButton />
+          <Link
+            href="/trace"
+            className="mt-4 px-6 py-3 bg-blue-600 text-white rounded-lg shadow-lg hover:bg-blue-700 transition-all text-lg font-semibold"
+          >
+            Go to Trace View
+          </Link>
+        </SignedIn>
+        <SignedOut>
+          <SignInButton mode="modal">
+            <button className="px-6 py-3 bg-blue-600 text-white rounded-lg shadow-lg hover:bg-blue-700 transition-all text-lg font-semibold">
+              Sign In to Continue
+            </button>
+          </SignInButton>
+        </SignedOut>
+      </div>
+
+      {/* Animations */}
+      <style>{`
+        @keyframes blob1 {
+          0%, 100% { transform: translateY(0) scale(1); }
+          50% { transform: translateY(-30px) scale(1.1); }
+        }
+        @keyframes blob2 {
+          0%, 100% { transform: translateY(0) scale(1); }
+          50% { transform: translateY(40px) scale(1.05); }
+        }
+        @keyframes blob3 {
+          0%, 100% { transform: translateY(0) scale(1); }
+          50% { transform: translateY(-20px) scale(1.08); }
+        }
+        .animate-blob1 { animation: blob1 12s ease-in-out infinite; }
+        .animate-blob2 { animation: blob2 14s ease-in-out infinite; }
+        .animate-blob3 { animation: blob3 16s ease-in-out infinite; }
+        @keyframes float {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-16px); }
+        }
+        .animate-float { animation: float 4s ease-in-out infinite; }
+      `}</style>
+    </main>
+  );
 }

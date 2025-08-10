@@ -5,11 +5,12 @@ function calculateDurationMs(traceA?: Trace, traceB?: Trace): number | undefined
     }
     return undefined;
 }
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
+import { useSearchParams } from 'next/navigation';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
 import emitter from "../../lib/emitter";
-import ReactFlow, { Background, Node, Edge, MarkerType } from "reactflow";
+import ReactFlow, { Background, Node, Edge, MarkerType, ReactFlowInstance, useReactFlow } from "reactflow";
 import "reactflow/dist/style.css";
 import AgentNode from "./nodes/AgentNode";
 import ToolNode from "./nodes/ToolNode";
@@ -22,26 +23,29 @@ import SkipPreviousIcon from '@mui/icons-material/SkipPrevious';
 import { trpc } from "../_trpc/client";
 import type { SessionResponse, Trace } from "./SessionResponse";
 import { parse } from "path";
+import CapstoneNode from "./nodes/CapstoneNode";
 
 
 const nodeTypes = {
     agent: AgentNode,
     resource: ResourceNode,
     tool: ToolNode,
+    capstone: CapstoneNode
 };
 
 const initialNodes: Node[] = [
-    { id: "agent1", type: "agent", data: { label: "Agent Node 1" }, position: { x: 0, y: 0 } },
-    { id: "tool1", type: "tool", data: { label: "Tool Node 1" }, position: { x: 200, y: 150 } },
-    { id: "resource1", type: "resource", data: { label: "Resource Node" }, position: { x: -200, y: 300 } },
+
 ];
 
 const initialEdges: Edge[] = [
-    { id: "e-agent1-tool1", source: "agent1", target: "tool1", animated: true, markerEnd: { type: MarkerType.ArrowClosed }, label: "Agent to Tool" },
-    { id: "e-tool1-resource1", source: "tool1", target: "resource1", animated: true, markerEnd: { type: MarkerType.ArrowClosed }, label: "Tool to Resource" },
+
 ];
 
 export default function FlowProvider() {
+    const reactFlowWrapper = useRef<HTMLDivElement>(null);
+    const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
+    const searchParams = useSearchParams();
+    const sessionId = searchParams.get('session_id') || undefined;
     const [allNodes, setAllNodes] = useState<Node[]>(initialNodes);
     const [allEdges, setAllEdges] = useState<Edge[]>(initialEdges);
     const [nodes, setNodes] = useState<Node[]>(initialNodes);
@@ -49,39 +53,139 @@ export default function FlowProvider() {
     const [step, setStep] = useState<number>(initialNodes.length);
     const [chains, setChains] = useState<{ start: number, end: number }[]>([]);
     const [selectedChainIdx, setSelectedChainIdx] = useState<number>(0);
-    // Only fetch once on mount
-    const { data, error } = trpc.python.traceToFlow.useQuery({}, { staleTime: Infinity, refetchOnMount: false, refetchOnWindowFocus: false });
+    // For external traces (new request)
+    const [externalTraces, setExternalTraces] = useState<Trace[] | null>(null);
+    const [externalNodes, setExternalNodes] = useState<Node[]>([]);
+    const [externalEdges, setExternalEdges] = useState<Edge[]>([]);
+    // Only fetch if sessionId is present
+    const {
+        data,
+        error,
+        refetch: refetchTraceToFlow
+    } = trpc.python.traceToFlow.useQuery(
+        sessionId ? { session_id: sessionId } : { session_id: '' },
+        { enabled: !!sessionId, staleTime: Infinity, refetchOnMount: false, refetchOnWindowFocus: false }
+    );
+    // Listen for external traces (from chat polling) and for tab switch event
+    useEffect(() => {
+        const handler = (event: unknown) => {
+            const traces = event as Trace[];
+            setExternalTraces(traces);
+            const { nodes: parsedNodes, edges: parsedEdges } = parseTracesToFlow(traces);
+            setExternalNodes(parsedNodes);
+            setExternalEdges(parsedEdges);
+        };
+        const switchHandler = () => {
+            setSelectedChainIdx(-1);
+        };
+        const refetchHandler = () => {
+            refetchTraceToFlow();
+        };
+        emitter.on('UpdateFlowFromTraces', handler);
+        emitter.on('SwitchToExternalFlow', switchHandler);
+        emitter.on('Refetch', refetchHandler);
+        return () => {
+            emitter.off('UpdateFlowFromTraces', handler);
+            emitter.off('SwitchToExternalFlow', switchHandler);
+            emitter.off('Refetch', refetchHandler);
+        };
+    }, [refetchTraceToFlow]);
 
-    // Parse chains from traces
+    // Parse chains from traces and emit statistics
     useEffect(() => {
         if (error) return;
         if (data && data.traces) {
-            // Find all chain_start and chain_end indices
+            function isTrace(m: any): m is Trace {
+                return m && typeof m.event === 'string' && typeof m.session_id === 'string' && typeof m.ts === 'number';
+            }
+            const traces = data.traces as Trace[];
             const starts: number[] = [];
             const ends: number[] = [];
-            data.traces.forEach((t, idx) => {
+            traces.forEach((t, idx) => {
                 if (t.event === 'chain_start') starts.push(idx);
                 if (t.event === 'chain_end') ends.push(idx);
             });
-            // Pair up starts and ends (assume order is correct)
-            const chainPairs: { start: number, end: number }[] = [];
+            const chainPairs: { start: number; end: number }[] = [];
             for (let i = 0; i < Math.min(starts.length, ends.length); i++) {
                 if (starts[i] <= ends[i]) {
                     chainPairs.push({ start: starts[i], end: ends[i] });
                 }
             }
             setChains(chainPairs);
-            // Default to most recent (last) chain
-            setSelectedChainIdx(chainPairs.length > 0 ? chainPairs.length - 1 : 0);
+            setSelectedChainIdx(prev =>
+                typeof prev === 'number' ? prev : chainPairs.length > 0 ? chainPairs.length - 1 : 0
+            );
+
+            // --- STATISTICS AGGREGATION ---
+            const responseTimes = chainPairs.map(({ start, end }, idx) => {
+                const startTrace = traces[start];
+                const endTrace = traces[end];
+                return {
+                    chain: idx + 1,
+                    responseTime: (endTrace && startTrace) ? Math.round((endTrace.ts - startTrace.ts) * 1000) : 0,
+                };
+            });
+            const criticalNodes: { idx: number, event: string, durationMs: number, trace: Trace }[] = [];
+            for (let i = 0; i < traces.length - 1; i++) {
+                const t1 = traces[i];
+                const t2 = traces[i + 1];
+                if ((t1.event && t1.event.endsWith('_start') && t2.event && t2.event.replace('_end', '_start') === t1.event)) {
+                    const durationMs = Math.round((t2.ts - t1.ts) * 1000);
+                    if (durationMs > 5000) {
+                        criticalNodes.push({ idx: i, event: t1.event, durationMs, trace: t1 });
+                    }
+                }
+            }
+            const avgResponseTime = responseTimes.length > 0 ? Math.round(responseTimes.reduce((a, b) => a + b.responseTime, 0) / responseTimes.length) : 0;
+            const totalFlows = chainPairs.length;
+            const totalNodes = traces.length;
+            emitter.emit('StatisticsData', {
+                responseTimes,
+                criticalNodes,
+                avgResponseTime,
+                totalFlows,
+                totalNodes,
+            });
         }
     }, [data, error]);
 
-    // Parse nodes/edges for selected chain
+    // Parse nodes/edges for selected chain or external traces
     useEffect(() => {
-        if (error) return;
+
+        // If "New Request" is selected and we have external traces, show those
+        if (selectedChainIdx === -1 && (externalNodes.length > 0 || externalEdges.length > 0)) {
+            setAllNodes(externalNodes);
+            setAllEdges(externalEdges);
+            setStep(externalNodes.length);
+            setNodes(externalNodes);
+            setEdges(externalEdges);
+            return;
+        }
+        // If we have traces but no chains, show all traces as a single flow
+        if (data && data.traces && chains.length === 0) {
+            function isTrace(m: any): m is Trace {
+                return m && typeof m.event === 'string' && typeof m.session_id === 'string' && typeof m.ts === 'number';
+            }
+            const traces = data.traces.filter(isTrace) as unknown as Trace[];
+            if (traces.length > 0) {
+                const { nodes: parsedNodes, edges: parsedEdges } = parseTracesToFlow(traces);
+                setAllNodes(parsedNodes);
+                setAllEdges(parsedEdges);
+                setStep(parsedNodes.length);
+                setNodes(parsedNodes);
+                setEdges(parsedEdges);
+            }
+            return;
+        }
+        // Otherwise, show the selected chain from session
         if (data && data.traces && chains.length > 0) {
+            function isTrace(m: any): m is Trace {
+                console.log(m);
+                return m && typeof m.event === 'string' && typeof m.ts === 'number';
+            }
+            const traces = data.traces.filter(isTrace) as Trace[];
             const { start, end } = chains[selectedChainIdx] || chains[0];
-            const tracesForChain = data.traces.slice(start, end + 1);
+            const tracesForChain = traces.slice(start, end + 1);
             const { nodes: parsedNodes, edges: parsedEdges } = parseTracesToFlow(tracesForChain);
             setAllNodes(parsedNodes);
             setAllEdges(parsedEdges);
@@ -89,13 +193,14 @@ export default function FlowProvider() {
             setNodes(parsedNodes.slice(0, 1));
             setEdges([]);
         }
-    }, [data, error, chains, selectedChainIdx]);
+    }, [data, error, chains, selectedChainIdx, externalTraces, externalNodes, externalEdges]);
 
     useEffect(() => {
         // Show up to current step
         const visibleNodes = allNodes.slice(0, step);
         const lastNode = visibleNodes[visibleNodes.length - 1];
-        const isEndStep = lastNode?.id === 'agent_end';
+        // Highlight last node unless it's a chain_end or agent_end node
+        const isEndStep = lastNode?.data?.trace?.event === 'chain_end' || lastNode?.id === 'agent_end';
         setNodes(
             visibleNodes.map((node, idx, arr) => ({
                 ...node,
@@ -136,149 +241,246 @@ export default function FlowProvider() {
         let nodeId = 0;
         let prevNodeId: string | null = null;
         let i = 0;
-        // 1. Agent node before chain_start
-        nodes.push({
-            id: `agent_start`,
-            type: 'agent',
-            data: {
-                label: 'Agent (Start)',
-                trace: {
-                    ...(traces[0] || {}),
-                    ...(traces[1] || {}),
-                    durationMs: calculateDurationMs(traces[0], traces[1]),
-                },
-            },
-            position: { x, y },
-        });
-        prevNodeId = `agent_start`;
-        y -= 150;
-        while (i < traces.length - 1) {
-            const traceA = traces[i];
-            const traceB = traces[i + 1];
-            // 2. Tool node between tool_start and tool_end
-            if (traceA.event === 'tool_start' && traceB.event === 'tool_end') {
+        while (i < traces.length) {
+            const curr = traces[i];
+            const next = traces[i + 1];
+            // chain_start
+            if (curr.event === 'chain_start') {
+                const chainStartId = `chain_start_${nodeId++}`;
+                console.log('Chain Start:', curr);
+                nodes.push({
+                    id: chainStartId,
+                    type: 'capstone',
+                    data: {
+                        label: 'Chain Start',
+                        inputs: curr.inputs?.input,
+                        outputs: curr.outputs?.output,
+                        trace: curr,
+                    },
+                    position: { x, y },
+                });
+                if (prevNodeId) {
+                    edges.push({
+                        id: `e-${prevNodeId}-${chainStartId}`,
+                        source: prevNodeId,
+                        target: chainStartId,
+                        label: '',
+                        animated: true,
+                        markerEnd: { type: MarkerType.ArrowClosed },
+                    });
+                }
+                prevNodeId = chainStartId;
+                y -= 150;
+                i++;
+                continue;
+            }
+            // chain_end
+            if (curr.event === 'chain_end') {
+                const chainEndId = `chain_end_${nodeId++}`;
+                nodes.push({
+                    id: chainEndId,
+                    type: 'capstone',
+                    data: {
+                        label: 'Chain End',
+                        trace: curr,
+                    },
+                    position: { x, y },
+                });
+                if (prevNodeId) {
+                    edges.push({
+                        id: `e-${prevNodeId}-${chainEndId}`,
+                        source: prevNodeId,
+                        target: chainEndId,
+                        label: '',
+                        animated: true,
+                        markerEnd: { type: MarkerType.ArrowClosed },
+                    });
+                }
+                prevNodeId = chainEndId;
+                y -= 150;
+                i++;
+                continue;
+            }
+            // tool_start/tool_end pair
+            if (curr.event === 'tool_start' && next && next.event === 'tool_end') {
                 const toolNodeId = `tool_${nodeId++}`;
                 nodes.push({
                     id: toolNodeId,
                     type: 'tool',
                     data: {
-                        label: traceA.tool || 'Tool',
-                        trace: {
-                            ...traceA,
-                            ...traceB,
-                            durationMs: calculateDurationMs(traceA, traceB),
-                        },
+                        label: curr.tool || 'Tool',
+                        trace: { ...curr, ...next, durationMs: calculateDurationMs(curr, next) },
                     },
                     position: { x: x + 300, y },
                 });
-                edges.push({
-                    id: `e-${prevNodeId}-${toolNodeId}`,
-                    source: prevNodeId!,
-                    target: toolNodeId,
-                    label: '',
-                    animated: true,
-                    markerEnd: { type: MarkerType.ArrowClosed },
-                });
+                if (prevNodeId) {
+                    edges.push({
+                        id: `e-${prevNodeId}-${toolNodeId}`,
+                        source: prevNodeId,
+                        target: toolNodeId,
+                        label: '',
+                        animated: true,
+                        markerEnd: { type: MarkerType.ArrowClosed },
+                    });
+                }
                 prevNodeId = toolNodeId;
                 y -= 150;
                 i += 2;
                 continue;
             }
-            // 3. Agent node between llm_start and llm_end
-            if (traceA.event === 'llm_start' && traceB.event === 'llm_end') {
+            // llm_start/llm_end pair
+            if (curr.event === 'llm_start' && next && next.event === 'llm_end') {
                 const agentNodeId = `agent_${nodeId++}`;
                 nodes.push({
                     id: agentNodeId,
                     type: 'agent',
                     data: {
                         label: 'Agent',
-                        trace: {
-                            ...traceA,
-                            ...traceB,
-                            durationMs: calculateDurationMs(traceA, traceB),
-                        },
+                        trace: { ...curr, ...next, durationMs: calculateDurationMs(curr, next) },
                     },
                     position: { x, y },
                 });
-                edges.push({
-                    id: `e-${prevNodeId}-${agentNodeId}`,
-                    source: prevNodeId!,
-                    target: agentNodeId,
-                    label: '',
-                    animated: true,
-                    markerEnd: { type: MarkerType.ArrowClosed },
-                });
+                if (prevNodeId) {
+                    edges.push({
+                        id: `e-${prevNodeId}-${agentNodeId}`,
+                        source: prevNodeId,
+                        target: agentNodeId,
+                        label: '',
+                        animated: true,
+                        markerEnd: { type: MarkerType.ArrowClosed },
+                    });
+                }
                 prevNodeId = agentNodeId;
                 y -= 150;
                 i += 2;
                 continue;
             }
-            // 4. Edge for every event (label = input field)
-            const edgeId = `e-${prevNodeId}-event${i}`;
-            const nextNodeId = `event${i}`;
+            // Single event node
+            const nodeType = curr.event && curr.event.includes('tool') ? 'tool' : 'agent';
+            const nodeIdStr = `node_${nodeId++}`;
             nodes.push({
-                id: nextNodeId,
-                type: 'agent',
+                id: nodeIdStr,
+                type: nodeType,
                 data: {
-                    label: traceA.event,
-                    trace: {
-                        ...traceA,
-                        ...traceB,
-                        durationMs: calculateDurationMs(traceA, traceB),
-                    },
+                    label: curr.event,
+                    trace: curr,
                 },
                 position: { x, y },
             });
-            edges.push({
-                id: edgeId,
-                source: prevNodeId!,
-                target: nextNodeId,
-                label: "",
-                animated: true,
-                markerEnd: { type: MarkerType.ArrowClosed },
-            });
-            prevNodeId = nextNodeId;
+            if (prevNodeId) {
+                edges.push({
+                    id: `e-${prevNodeId}-${nodeIdStr}`,
+                    source: prevNodeId,
+                    target: nodeIdStr,
+                    label: '',
+                    animated: true,
+                    markerEnd: { type: MarkerType.ArrowClosed },
+                });
+            }
+            prevNodeId = nodeIdStr;
             y -= 150;
-            i += 1;
+            i++;
         }
-        // 5. Agent node after chain_end
-        nodes.push({
-            id: `agent_end`,
-            type: 'agent',
-            data: {
-                label: 'Agent (End)',
-                trace: {
-                    ...(traces[traces.length - 2] || {}),
-                    ...(traces[traces.length - 1] || {}),
-                    durationMs: calculateDurationMs(traces[traces.length - 2], traces[traces.length - 1]),
-                },
-            },
-            position: { x, y },
-        });
-        edges.push({
-            id: `e-${prevNodeId}-agent_end`,
-            source: prevNodeId!,
-            target: 'agent_end',
-            label: '',
-            animated: true,
-            markerEnd: { type: MarkerType.ArrowClosed },
-        });
         return { nodes, edges };
     }
 
     // Handler for node click
     const handleNodeClick = (_event: any, node: Node) => {
         emitter.emit('ShowNode', node.data?.trace);
+        focusNode(node.id);
     };
+
+    // Focus camera on a node by id
+    const focusNode = (nodeId: string) => {
+        if (!reactFlowInstance) return;
+        const node = reactFlowInstance.getNode(nodeId);
+        if (node) {
+            // Offset x by +300px to account for sidebar
+            const x = node.position.x + (node.width || 0) / 2 + 300;
+            const y = node.position.y + (node.height || 0) / 2;
+            reactFlowInstance.setCenter(x, y, { zoom: 1.2, duration: 500 });
+        }
+    };
+
+
+    // Focus the most center node in the current flow
+    const focusCenterNode = () => {
+        if (!reactFlowInstance) return;
+        const nodes = reactFlowInstance.getNodes();
+        if (!nodes.length) return;
+        // Compute average x/y
+        const avgX = nodes.reduce((sum, n) => sum + n.position.x, 0) / nodes.length;
+        const avgY = nodes.reduce((sum, n) => sum + n.position.y, 0) / nodes.length;
+        // Find node closest to center
+        let minDist = Infinity;
+        let centerNode = nodes[0];
+        for (const n of nodes) {
+            const dx = n.position.x - avgX;
+            const dy = n.position.y - avgY;
+            const dist = dx * dx + dy * dy;
+            if (dist < minDist) {
+                minDist = dist;
+                centerNode = n;
+            }
+        }
+        focusNode(centerNode.id);
+    };
+
+    // Listen for ShowNode event to autofocus
+    useEffect(() => {
+        const handler = (trace: any) => {
+            if (!trace) return;
+            if (!reactFlowInstance) return;
+            const nodes = reactFlowInstance.getNodes();
+            let found = nodes.find(n => n.data?.trace?.message_id && trace.message_id && n.data.trace.message_id === trace.message_id);
+            if (!found && trace.event && trace.ts) {
+                found = nodes.find(n => n.data?.trace?.event === trace.event && n.data?.trace?.ts === trace.ts);
+            }
+            if (found) {
+                focusNode(found.id);
+            }
+        };
+        emitter.on('ShowNode', handler);
+        return () => emitter.off('ShowNode', handler);
+    }, [reactFlowInstance]);
+
+    // Focus center node when new external flow is received
+    useEffect(() => {
+        if (selectedChainIdx === -1 && externalNodes.length > 0 && reactFlowInstance) {
+            setTimeout(() => focusCenterNode(), 300);
+        }
+    }, [externalNodes, selectedChainIdx, reactFlowInstance]);
+
+    // Focus center node when dropdown entry is changed
+    useEffect(() => {
+        if (allNodes.length > 0 && reactFlowInstance) {
+            setTimeout(() => focusCenterNode(), 300);
+        }
+    }, [selectedChainIdx, allNodes, reactFlowInstance]);
+    // Use a key to force ReactFlow to re-mount when switching between chains and new request
+    const flowKey = selectedChainIdx === -1 ? 'external' : `chain-${selectedChainIdx}`;
+    // Compute dropdown options and value
+    const hasExternal = externalTraces && externalTraces.length > 0;
+    const dropdownOptions = [
+        ...(hasExternal ? [{ label: 'New Request', value: -1 }] : []),
+        ...chains.map((chain, idx) => ({ label: `Chain ${idx + 1} (${chain.start} - ${chain.end})`, value: idx })),
+    ];
+    // Ensure value is always valid
+    const dropdownValue = dropdownOptions.some(opt => opt.value === selectedChainIdx)
+        ? selectedChainIdx
+        : (hasExternal ? -1 : (chains.length > 0 ? 0 : ''));
+
     return (
-        <div style={{ width: "100vw", height: "100vh", position: "relative", overflow: "hidden" }}>
+        <div ref={reactFlowWrapper} style={{ width: "100vw", height: "100vh", position: "relative", overflow: "hidden" }}>
             <ReactFlow
+                key={flowKey}
                 nodes={nodes}
                 edges={edges}
                 nodeTypes={nodeTypes}
                 fitView
                 style={{ width: "100vw", height: "100vh" }}
                 onNodeClick={handleNodeClick}
+                onInit={setReactFlowInstance}
             >
                 <Background />
             </ReactFlow>
@@ -306,17 +508,16 @@ export default function FlowProvider() {
                 <IconButton color="success" sx={{ background: 'white', color: 'black', }} onClick={handleStepForward}>
                     <SkipNextIcon />
                 </IconButton>
-                {/* Dropdown for chain selection */}
-                {chains.length > 1 && (
+                {dropdownOptions.length > 1 && (
                     <Select
-                        value={selectedChainIdx}
+                        value={dropdownValue}
                         onChange={e => setSelectedChainIdx(Number(e.target.value))}
                         size="small"
                         sx={{ minWidth: 120, background: 'white', ml: 2 }}
                     >
-                        {chains.map((chain, idx) => (
-                            <MenuItem key={idx} value={idx}>
-                                {`Chain ${idx + 1} (${chain.start} - ${chain.end})`}
+                        {dropdownOptions.map(opt => (
+                            <MenuItem key={opt.value} value={opt.value} sx={opt.value === -1 ? { fontWeight: 700, color: '#2563eb' } : {}}>
+                                {opt.label}
                             </MenuItem>
                         ))}
                     </Select>

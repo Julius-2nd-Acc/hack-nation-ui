@@ -1,35 +1,17 @@
-// Helper to calculate gradient color for duration (in seconds) and base color (as [r,g,b,a])
-function getDurationColor(seconds: number, base: [number, number, number, number]): string {
-    // 0s = base, 5s = yellow, 10s = red
-    const t = Math.max(0, Math.min(1, seconds / 10));
-    let r, g, b, a;
-    if (t <= 0.5) {
-        // base to yellow (255,255,0)
-        const t2 = t / 0.5;
-        r = base[0] + (255 - base[0]) * t2;
-        g = base[1] + (255 - base[1]) * t2;
-        b = base[2] + (0 - base[2]) * t2;
-        a = base[3];
-    } else {
-        // yellow to red (255,255,0) to (255,0,0)
-        const t2 = (t - 0.5) / 0.5;
-        r = 255;
-        g = 255 + (0 - 255) * t2;
-        b = 0;
-        a = base[3];
-    }
-    return `rgba(${Math.round(r)},${Math.round(g)},${Math.round(b)},${a})`;
-}
+
 import { useState } from "react";
 
 import { Handle, NodeProps, Position } from "reactflow";
 import SettingsIcon from '@mui/icons-material/Settings';
-import SmartToyIcon from '@mui/icons-material/SmartToy';
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
+import CloseIcon from '@mui/icons-material/Close';
 
-export type AgentNodeData = {
+export type CapstoneNodeData = {
     processing?: boolean;
     label?: string;
     token?: string;
+    inputs?: string;
+    outputs?: string;
 };
 
 export const nodeStyle = {
@@ -40,19 +22,13 @@ export const nodeStyle = {
     minHeight: '100px',
 };
 
-function AgentNode(props: NodeProps<AgentNodeData>) {
+function CapstoneNode(props: NodeProps<CapstoneNodeData>) {
     const processing = props.data.processing ?? false;
-    // Visual aid: color by durationMs (0ms=lightskyblue, 5s=yellow, 10s=red)
     let bg = 'lightskyblue';
-    let borderColor = 'rgba(70,130,180)'; // steelblue with alpha
-    let shadowColor = 'rgba(70,130,180)';
+    let borderColor = 'rgba(135, 206, 250, 0.5)'; // lightskyblue with alpha
+    let shadowColor = 'rgba(135, 206, 250, 0.5)'; // lightskyblue with alpha
     const duration = (props.data as any)?.trace?.durationMs;
-    if (typeof duration === 'number') {
-        const seconds = duration / 1000;
-        bg = getDurationColor(seconds, [173, 216, 230, 1]);
-        borderColor = getDurationColor(seconds, [173, 216, 230, 0.5]);
-        shadowColor = getDurationColor(seconds, [173, 216, 230, 0.3]);
-    }
+
     return (
         <div style={{
             ...nodeStyle,
@@ -92,31 +68,15 @@ function AgentNode(props: NodeProps<AgentNodeData>) {
                 >
                     {props.data.label ?? 'Agent'}
                 </h3>
-                <div style={{ position: 'absolute', right: '0' }}>
-                    <SettingsIcon
-                        style={{
-                            fontSize: 30,
-                            animation: processing ? 'spin 1s linear infinite' : 'none',
-                            color: processing ? 'red' : 'rgba(0, 0, 0, 0.3)',
-                        }}
-                    />
-                    <style>{`
-                        @keyframes spin {
-                            from { transform: rotate(0deg); }
-                            to { transform: rotate(360deg); }
-                        }
-                    `}</style>
-                </div>
+
             </div>
-            <SmartToyIcon
-                style={{
-                    color: 'rgba(0,0,0,0.3)',
-                    margin: '5px 0 0 0',
-                    position: 'relative',
-                    textAlign: 'center',
-                    fontSize: '30px',
-                }}
-            />
+            {props.data.label === 'Chain Start' ? (
+                <div style={{ display: 'flex', justifyContent: 'center', margin: '5px 0 0 0' }}>
+                    <ArrowUpwardIcon style={{ color: 'rgba(0,0,0,0.3)' }} />
+                </div>
+            ) : (
+                <CloseIcon style={{ color: 'rgba(0,0,0,0.3)', margin: '5px 0 0 0' }} />
+            )}
             <Handle
                 type="target"
                 id="target"
@@ -136,4 +96,4 @@ function AgentNode(props: NodeProps<AgentNodeData>) {
     );
 }
 
-export default AgentNode;
+export default CapstoneNode;

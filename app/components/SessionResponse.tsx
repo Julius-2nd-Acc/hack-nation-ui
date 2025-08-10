@@ -13,7 +13,7 @@ export type Trace = {
         input: string;
     };
     name?: string[]; // e.g., ["langchain", "agents", "agent", "AgentExecutor"]
-    session_id: string;
+
     ts: number; // timestamp (seconds with fractions)
     params?: {
         _type: string;       // e.g., "openai-chat"
