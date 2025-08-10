@@ -607,12 +607,24 @@
     align-items: center;
   }
 
+  .justify-between {
+    justify-content: space-between;
+  }
+
   .justify-center {
     justify-content: center;
   }
 
   .justify-end {
     justify-content: flex-end;
+  }
+
+  .gap-1\.5 {
+    gap: calc(var(--spacing) * 1.5);
+  }
+
+  .gap-3 {
+    gap: calc(var(--spacing) * 3);
   }
 
   .gap-4 {
@@ -717,6 +729,10 @@
 
   .text-current {
     color: currentColor;
+  }
+
+  .uppercase {
+    text-transform: uppercase;
   }
 
   .antialiased {

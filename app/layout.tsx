@@ -36,14 +36,35 @@ export default function RootLayout({
       <TRPCProvider>
         <html lang="en">
           <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-            <header className="flex h-16 items-center justify-end gap-4 p-4">
-              <SignedOut>
-                <SignInButton />
-                <SignUpButton />
-              </SignedOut>
-              <SignedIn>
-                <UserButton />
-              </SignedIn>
+            <header className="flex h-16 items-center justify-between gap-4 p-4">
+              {/* Logo and title */}
+              <div className="flex items-center gap-1.5">
+                <img src="/toolbench-logo.svg" alt="ToolBench Logo" style={{ width: 56, height: 56, display: 'block' }} />
+                <span
+                  style={{
+                    fontSize: 28,
+                    fontWeight: 700,
+                    color: 'white',
+                    textShadow: '0 2px 8px rgba(0,0,0,0.04)',
+                    letterSpacing: 1,
+                    lineHeight: 1,
+                    display: 'inline-block',
+                    position: 'relative',
+                  }}
+                >
+                  Tool
+                  <span style={{ color: 'steelblue' }}>Bench</span>
+                </span>
+              </div>
+              <div className="flex gap-4 items-center">
+                <SignedOut>
+                  <SignInButton />
+                  <SignUpButton />
+                </SignedOut>
+                <SignedIn>
+                  <UserButton />
+                </SignedIn>
+              </div>
             </header>
             {children}
           </body>
