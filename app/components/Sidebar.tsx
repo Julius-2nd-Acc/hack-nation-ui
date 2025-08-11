@@ -55,7 +55,12 @@ const Sidebar: React.FC = () => {
     useEffect(() => {
         if (data) {
             console.log('Chat history fetched:', data);
-            setChatMessages(data.messages);
+            setChatMessages(
+                data.messages.map((msg: any) => ({
+                    sender: msg.role,
+                    text: msg.content,
+                }))
+            );
         }
         if (error) {
             console.error('Error fetching chat history:', error);

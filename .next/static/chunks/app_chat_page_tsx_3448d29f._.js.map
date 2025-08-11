@@ -1,6 +1,0 @@
-{
-  "version": 3,
-  "sources": [],
-  "sections": [
-    {"offset": {"line": 7, "column": 0}, "map": {"version":3,"sources":["file:///C:/Users/jplk2/Documents/GitHub/hack-nation-ui/app/chat/page.tsx"],"sourcesContent":["\r\n\r\n\"use client\";\r\nimport dynamic from \"next/dynamic\";\r\nconst FlowProvider = dynamic(() => import(\"../components/FlowProvider\"), { ssr: false });\r\n\r\nexport default function ChatPage() {\r\n    return <FlowProvider />;\r\n}\r\n"],"names":[],"mappings":";;;;AAGA;;AADA;;;AAEA,MAAM,eAAe,CAAA,GAAA,kKAAA,CAAA,UAAO,AAAD,EAAE;;;;;;IAA8C,KAAK;;KAA1E;AAES,SAAS;IACpB,qBAAO,6LAAC;;;;;AACZ;MAFwB","debugId":null}}]
-}

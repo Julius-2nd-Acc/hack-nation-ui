@@ -1,4 +1,4 @@
-# Hack Nation UI
+# Toolbox
 
 This project is a Next.js-based frontend for visualizing and interacting with AI agent trace data as a flow diagram. It is designed for debugging, analysis, and exploration of agent/tool/resource chains and their performance. [Backend Repo](https://github.com/Julius-2nd-Acc/hack-nation-be).
 
